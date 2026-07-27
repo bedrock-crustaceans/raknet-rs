@@ -18,12 +18,14 @@ impl RakSession {
     pub(crate) fn spawn(
         session: RakSessionIntl,
         datagram_tx: UnboundedSender<(Box<[u8]>, SocketAddr)>,
+        disconnect_tx: UnboundedSender<RakSessionId>,
     ) -> (Self, UnboundedSender<RakSessionInput>) {
         let (msg_tx, msg_rx) = unbounded_channel();
         let (buf_tx, buf_rx) = unbounded_channel();
         let (tx, rx) = unbounded_channel();
 
         let addr = session.addr;
+        let id = session.id;
 
         tokio::spawn(async move {
             let mut msg_rx = msg_rx;
@@ -78,7 +80,10 @@ impl RakSession {
 
                             let _ = buf_tx.send(buf);
                         }
-                        RakSessionOutput::Disconnected(..) => return,
+                        RakSessionOutput::Disconnected(..) => {
+                            let _ = disconnect_tx.send(id);
+                            return;
+                        }
                     }
                 }
             }

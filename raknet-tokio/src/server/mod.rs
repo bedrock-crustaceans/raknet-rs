@@ -87,6 +87,7 @@ impl RakServer {
                 let mut server = RakServerIntl::new(config, addr);
 
                 let (dgram_tx, mut dgram_rx) = unbounded_channel::<(Box<[u8]>, SocketAddr)>();
+                let (disconnect_tx, mut disconnect_rx) = unbounded_channel::<RakSessionId>();
 
                 loop {
                     tokio::select! {
@@ -100,6 +101,10 @@ impl RakServer {
                         }
                         Some((buf, addr)) = dgram_rx.recv() => {
                             let _ = socket.send_to(buf.as_ref(), addr).await;
+                        }
+                        Some(id) = disconnect_rx.recv() => {
+                            let _ = server.handle(RakServerInput::RemoveSession(id));
+                            sessions.remove(&id);
                         }
                         Some(msg) = msg_rx.recv() => {
                             match msg {
@@ -132,7 +137,7 @@ impl RakServer {
 
                                 debug!("session {:?} connected", id);
 
-                                let (session, tx) = RakSession::spawn(*session, dgram_tx.clone());
+                                let (session, tx) = RakSession::spawn(*session, dgram_tx.clone(), disconnect_tx.clone());
 
                                 sessions.insert(id, tx);
 
