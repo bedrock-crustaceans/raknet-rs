@@ -137,7 +137,11 @@ impl RakServer {
 
                                 debug!("session {:?} connected", id);
 
-                                let (session, tx) = RakSession::spawn(*session, dgram_tx.clone(), disconnect_tx.clone());
+                                let (session, tx) = RakSession::spawn(
+                                    *session,
+                                    dgram_tx.clone(),
+                                    disconnect_tx.clone(),
+                                );
 
                                 sessions.insert(id, tx);
 

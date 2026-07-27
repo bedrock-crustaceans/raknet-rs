@@ -119,7 +119,11 @@ impl RakClient {
                             RakClientOutput::SessionConnected(session) => {
                                 debug!("session connected");
 
-                                let (session, tx) = RakSession::spawn(*session, dgram_tx.clone(), disconnect_tx.clone());
+                                let (session, tx) = RakSession::spawn(
+                                    *session,
+                                    dgram_tx.clone(),
+                                    disconnect_tx.clone(),
+                                );
 
                                 session_tx = Some(tx);
 
