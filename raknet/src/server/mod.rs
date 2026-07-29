@@ -40,6 +40,7 @@ pub struct RakServer {
 
     session_id: RakSessionId,
     session_map: HashMap<SocketAddr, RakSessionId>,
+    session_addr: HashMap<RakSessionId, SocketAddr>,
     session_temp: HashMap<SocketAddr, RakSession>,
 
     output: VecDeque<RakServerOutput>,
@@ -68,6 +69,12 @@ impl Sans for RakServer {
             RakServerInput::SetMessage(msg) => {
                 self.config.message = msg;
             }
+            RakServerInput::RemoveSession(id) => {
+                if let Some(addr) = self.session_addr.remove(&id) {
+                    self.session_map.remove(&addr);
+                    self.session_temp.remove(&addr);
+                }
+            }
         };
         Ok(())
     }
@@ -85,6 +92,7 @@ impl RakServer {
 
             session_id: RakSessionId(0),
             session_map: HashMap::new(),
+            session_addr: HashMap::new(),
             session_temp: HashMap::new(),
 
             output: VecDeque::new(),
@@ -300,6 +308,7 @@ impl RakServer {
         self.session_id.0 += 1;
 
         self.session_map.insert(addr, id);
+        self.session_addr.insert(id, addr);
         self.session_temp.insert(
             addr,
             RakSession::new(id, addr, request.client, request.mtu, |_| ()),

@@ -6,7 +6,7 @@ use crate::client::state::RakClientState;
 use crate::prelude::{RakServerError, RakSession};
 use raknet::prelude::{
     RakClient as RakClientIntl, RakClientConfig, RakClientError, RakClientInput, RakClientOutput,
-    RakSessionInput, Sans,
+    RakSessionId, RakSessionInput, Sans,
 };
 use std::collections::{HashMap, VecDeque};
 use std::mem::take;
@@ -61,6 +61,7 @@ impl RakClient {
                 let mut client = RakClientIntl::new(config);
 
                 let (dgram_tx, mut dgram_rx) = unbounded_channel::<(Box<[u8]>, SocketAddr)>();
+                let (disconnect_tx, mut disconnect_rx) = unbounded_channel::<RakSessionId>();
 
                 let timer = sleep(Duration::ZERO);
                 tokio::pin!(timer);
@@ -77,6 +78,9 @@ impl RakClient {
                         }
                         Some((buf, addr)) = dgram_rx.recv() => {
                             let _ = socket.send_to(buf.as_ref(), addr).await;
+                        }
+                        Some(_) = disconnect_rx.recv() => {
+                            session_tx = None;
                         }
                         Some(msg) = msg_rx.recv() => {
                             let now = SystemTime::now();
@@ -115,7 +119,11 @@ impl RakClient {
                             RakClientOutput::SessionConnected(session) => {
                                 debug!("session connected");
 
-                                let (session, tx) = RakSession::spawn(*session, dgram_tx.clone());
+                                let (session, tx) = RakSession::spawn(
+                                    *session,
+                                    dgram_tx.clone(),
+                                    disconnect_tx.clone(),
+                                );
 
                                 session_tx = Some(tx);
 
