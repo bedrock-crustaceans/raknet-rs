@@ -293,6 +293,7 @@ impl RakClient {
         let reply = OpenConnectionReply1::deserialize(buf)?;
 
         self.mtu = reply.mtu;
+        self.cookie = reply.cookie;
         self.state = RakClientState::Handshake2(addr);
 
         self.send_open_connection_request_2(addr)?;
