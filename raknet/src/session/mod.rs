@@ -35,6 +35,8 @@ use tracing::debug;
 #[derive(Default, Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct RakSessionId(pub u64);
 
+const RELIABLE_WINDOW: usize = 8192;
+
 #[derive(Clone, Debug)]
 pub struct RakSession {
     pub id: RakSessionId,
@@ -66,6 +68,8 @@ pub struct RakSession {
     outbound_seq_idx: [u32; 32],
 
     inbound_seq: u32,
+    inbound_rel_seen: HashSet<u32>,
+    inbound_rel_order: VecDeque<u32>,
     inbound_spl_queue: HashMap<u16, HashMap<u32, Frame>>,
     inbound_ord_queue: HashMap<u8, HashMap<u32, Frame>>,
     inbound_ord_idx: [u32; 32],
@@ -159,6 +163,8 @@ impl RakSession {
             outbound_seq_idx: [0; 32],
 
             inbound_seq: 0,
+            inbound_rel_seen: HashSet::new(),
+            inbound_rel_order: VecDeque::new(),
             inbound_spl_queue: HashMap::new(),
             inbound_ord_queue: HashMap::new(),
             inbound_ord_idx: [0; 32],
@@ -547,6 +553,7 @@ impl RakSession {
                 "received duplicate FrameSet {} from {}",
                 set.sequence, self.addr
             );
+            return Ok(());
         }
         self.sequences_recv.insert(set.sequence);
 
@@ -571,11 +578,35 @@ impl RakSession {
     }
 
     fn handle_frame(&mut self, frame: Frame, now: SystemTime) -> Result<(), RakSessionError> {
+        if frame.reliability.is_reliable() && !self.track_reliable(frame.reliable_index) {
+            debug!(
+                "received duplicate reliable frame {} from {}",
+                frame.reliable_index, self.addr
+            );
+            return Ok(());
+        }
+
         match frame.is_split() {
             true => self.handle_split_frame(frame, now)?,
             false => self.handle_full_frame(frame, now)?,
         }
         Ok(())
+    }
+
+    fn track_reliable(&mut self, index: u32) -> bool {
+        if !self.inbound_rel_seen.insert(index) {
+            return false;
+        }
+
+        self.inbound_rel_order.push_back(index);
+
+        while self.inbound_rel_order.len() > RELIABLE_WINDOW {
+            if let Some(old) = self.inbound_rel_order.pop_front() {
+                self.inbound_rel_seen.remove(&old);
+            }
+        }
+
+        true
     }
 
     fn handle_full_frame(&mut self, frame: Frame, now: SystemTime) -> Result<(), RakSessionError> {
