@@ -76,6 +76,10 @@ impl Sans for RakClient {
                 }
 
                 self.state = RakClientState::Handshake1(remote);
+                self.attempts = 0;
+                self.last_attempt = now
+                    .checked_sub(self.config.conn_attempt_interval)
+                    .unwrap_or(now);
 
                 self.handle_timeout(now)?;
             }
@@ -229,6 +233,9 @@ impl RakClient {
 
     fn handle_timeout(&mut self, now: SystemTime) -> Result<(), RakClientError> {
         if matches!(self.state, RakClientState::Unconnected) {
+            self.output
+                .push_back(RakClientOutput::Wait(self.config.conn_attempt_interval));
+
             return Ok(());
         }
 
@@ -293,6 +300,7 @@ impl RakClient {
         let reply = OpenConnectionReply1::deserialize(buf)?;
 
         self.mtu = reply.mtu;
+        self.cookie = reply.cookie;
         self.state = RakClientState::Handshake2(addr);
 
         self.send_open_connection_request_2(addr)?;
